@@ -127,7 +127,13 @@ def create_sidebar():
     with st.sidebar.expander("🔧 Advanced Parameters"):
         max_age = st.slider("Max Age", 10, 200, DEFAULT_PARAMS["max_age"])
         min_hits = st.slider("Min Hits", 1, 10, DEFAULT_PARAMS["min_hits"])
-        
+
+    # Video processing options
+    with st.sidebar.expander("🎬 Video Processing"):
+        playback_speed = st.selectbox("Playback Speed", [0.25, 0.5, 1.0, 1.5, 2.0], index=2)
+        max_display_fps = st.slider("Max Display FPS", 5, 30, 15)
+        enable_debug_overlay = st.checkbox("Debug Overlay", value=False)
+
     return {
         'model': selected_model,
         'tracker': selected_tracker,
@@ -135,7 +141,10 @@ def create_sidebar():
         'nms_threshold': nms_threshold,
         'reid_threshold': reid_threshold,
         'max_age': max_age,
-        'min_hits': min_hits
+        'min_hits': min_hits,
+        'playback_speed': playback_speed,
+        'max_display_fps': max_display_fps,
+        'enable_debug_overlay': enable_debug_overlay
     }
 
 def create_main_interface():
@@ -277,39 +286,137 @@ def process_keypoint_video(video_file, config):
         return []
 
 def show_analytics():
-    """Show analytics dashboard"""
+    """Show enhanced analytics dashboard"""
     if not st.session_state.results_data:
         st.info("📊 Process a video to see analytics")
         return
-        
-    st.markdown("## 📈 Analytics Dashboard")
-    
+
+    st.markdown("## 📈 Enhanced Analytics Dashboard")
+
     # Convert to DataFrame
     df = pd.DataFrame(st.session_state.results_data)
-    
-    # Create metrics
-    col1, col2, col3, col4 = st.columns(4)
-    
+
+    # Enhanced metrics
+    col1, col2, col3, col4, col5 = st.columns(5)
+
     with col1:
         st.metric("Max Players", df['active_players'].max())
     with col2:
         st.metric("Avg Players", f"{df['active_players'].mean():.1f}")
     with col3:
-        st.metric("Total Unique", df['total_players'].max())
+        if 'avg_confidence' in df.columns:
+            st.metric("Avg Confidence", f"{df['avg_confidence'].mean():.2f}")
+        else:
+            st.metric("Total Frames", df['current_frame'].max())
     with col4:
-        st.metric("Video Duration", f"{df['timestamp'].max():.1f}s")
-    
-    # Player count over time
-    fig_players = px.line(df, x='timestamp', y='active_players',
-                         title='Active Players Over Time',
-                         labels={'timestamp': 'Time (seconds)', 'active_players': 'Active Players'})
-    st.plotly_chart(fig_players, use_container_width=True)
-    
-    # Player detection histogram
-    fig_hist = px.histogram(df, x='active_players', nbins=20,
-                           title='Distribution of Active Players',
-                           labels={'active_players': 'Number of Active Players', 'count': 'Frequency'})
-    st.plotly_chart(fig_hist, use_container_width=True)
+        if 'tracking_efficiency' in df.columns:
+            st.metric("Track Efficiency", f"{df['tracking_efficiency'].mean():.2f}")
+        else:
+            st.metric("Video Duration", f"{df['timestamp'].max():.1f}s")
+    with col5:
+        if 'moving_players' in df.columns:
+            st.metric("Avg Moving", f"{df['moving_players'].mean():.1f}")
+        else:
+            st.metric("Processing FPS", f"{df.get('processing_fps', [0]).mean():.1f}")
+
+    # Create tabs for different analytics
+    tab1, tab2, tab3, tab4 = st.tabs(["📊 Player Tracking", "🎯 Performance", "📈 Advanced", "🔍 Detailed"])
+
+    with tab1:
+        # Player count over time
+        fig_players = px.line(df, x='timestamp', y='active_players',
+                             title='Active Players Over Time',
+                             labels={'timestamp': 'Time (seconds)', 'active_players': 'Active Players'})
+        fig_players.update_layout(height=400)
+        st.plotly_chart(fig_players, use_container_width=True)
+
+        # ID pool usage over time
+        if 'id_pool_usage' in df.columns:
+            # Extract numeric values from id_pool_usage strings like "8/12"
+            df['used_ids'] = df['id_pool_usage'].str.split('/').str[0].astype(int)
+            fig_ids = px.line(df, x='timestamp', y='used_ids',
+                             title='ID Pool Usage Over Time',
+                             labels={'timestamp': 'Time (seconds)', 'used_ids': 'Used IDs'})
+            fig_ids.update_layout(height=400)
+            st.plotly_chart(fig_ids, use_container_width=True)
+
+    with tab2:
+        # Performance metrics
+        if 'processing_fps' in df.columns:
+            fig_fps = px.line(df, x='timestamp', y='processing_fps',
+                             title='Processing Performance (FPS)',
+                             labels={'timestamp': 'Time (seconds)', 'processing_fps': 'FPS'})
+            fig_fps.update_layout(height=400)
+            st.plotly_chart(fig_fps, use_container_width=True)
+
+        # Confidence over time
+        if 'avg_confidence' in df.columns:
+            fig_conf = px.line(df, x='timestamp', y='avg_confidence',
+                              title='Average Detection Confidence',
+                              labels={'timestamp': 'Time (seconds)', 'avg_confidence': 'Confidence'})
+            fig_conf.update_layout(height=400)
+            st.plotly_chart(fig_conf, use_container_width=True)
+
+    with tab3:
+        # Advanced analytics
+        if 'moving_players' in df.columns and 'avg_velocity' in df.columns:
+            # Movement analysis
+            fig_movement = go.Figure()
+            fig_movement.add_trace(go.Scatter(x=df['timestamp'], y=df['moving_players'],
+                                            mode='lines', name='Moving Players', line=dict(color='green')))
+            fig_movement.add_trace(go.Scatter(x=df['timestamp'], y=df['avg_velocity']*100,
+                                            mode='lines', name='Avg Velocity (×100)', line=dict(color='red')))
+            fig_movement.update_layout(title='Player Movement Analysis',
+                                     xaxis_title='Time (seconds)',
+                                     yaxis_title='Count / Velocity',
+                                     height=400)
+            st.plotly_chart(fig_movement, use_container_width=True)
+
+        # Tracking efficiency
+        if 'tracking_efficiency' in df.columns:
+            fig_efficiency = px.line(df, x='timestamp', y='tracking_efficiency',
+                                   title='Tracking Efficiency Over Time',
+                                   labels={'timestamp': 'Time (seconds)', 'tracking_efficiency': 'Efficiency'})
+            fig_efficiency.update_layout(height=400)
+            st.plotly_chart(fig_efficiency, use_container_width=True)
+
+    with tab4:
+        # Detailed statistics
+        st.markdown("### 📋 Detailed Statistics")
+
+        # Summary statistics
+        summary_stats = {
+            'Total Frames Processed': df['current_frame'].max(),
+            'Video Duration': f"{df['timestamp'].max():.1f} seconds",
+            'Average Players per Frame': f"{df['active_players'].mean():.2f}",
+            'Maximum Players Detected': df['active_players'].max(),
+            'Player Detection Rate': f"{(df['active_players'] > 0).mean() * 100:.1f}%"
+        }
+
+        if 'avg_confidence' in df.columns:
+            summary_stats['Average Confidence'] = f"{df['avg_confidence'].mean():.3f}"
+        if 'tracking_efficiency' in df.columns:
+            summary_stats['Average Tracking Efficiency'] = f"{df['tracking_efficiency'].mean():.3f}"
+
+        for key, value in summary_stats.items():
+            st.text(f"{key}: {value}")
+
+        # Player detection histogram
+        fig_hist = px.histogram(df, x='active_players', nbins=20,
+                               title='Distribution of Active Players per Frame',
+                               labels={'active_players': 'Number of Active Players', 'count': 'Frequency'})
+        fig_hist.update_layout(height=400)
+        st.plotly_chart(fig_hist, use_container_width=True)
+
+        # Data export option
+        if st.button("📥 Download Analytics Data"):
+            csv = df.to_csv(index=False)
+            st.download_button(
+                label="Download CSV",
+                data=csv,
+                file_name="football_analytics.csv",
+                mime="text/csv"
+            )
 
 def show_keypoint_analytics():
     """Show football pose analytics dashboard"""

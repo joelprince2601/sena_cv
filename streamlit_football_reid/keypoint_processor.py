@@ -140,83 +140,319 @@ class StreamlitKeypointProcessor:
             tmp_file.write(uploaded_file.read())
             temp_video_path = tmp_file.name
             
+        # Get video info for proper timing
+        cap = cv2.VideoCapture(temp_video_path)
+        video_fps = cap.get(cv2.CAP_PROP_FPS)
+        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        cap.release()
+
+        # Calculate frame timing for smooth playback
+        target_fps = min(video_fps, 12)  # Cap at 12 FPS for pose analysis
+        frame_delay = 1.0 / target_fps if target_fps > 0 else 0.083  # Default ~12 FPS
+
         try:
-            # Create UI layout
-            col1, col2 = st.columns([3, 1])
-            
+            # Create enhanced UI layout
+            col1, col2 = st.columns([2.5, 1.5])
+
             with col1:
-                st.markdown("## 🎬 Keypoint Detection & Tracking")
+                st.markdown("### 🤸 Live Football Pose Analysis")
                 video_placeholder = st.empty()
-                
+
+                # Enhanced controls
+                control_col1, control_col2, control_col3 = st.columns(3)
+                with control_col1:
+                    speed_multiplier = st.selectbox("Analysis Speed", [0.5, 1.0, 1.5, 2.0], index=1, key="pose_speed")
+                with control_col2:
+                    frame_skip = st.selectbox("Frame Skip", [1, 2, 3, 5], index=1, key="pose_skip")
+                with control_col3:
+                    show_pose_debug = st.checkbox("Pose Debug", value=False)
+
                 # 3D visualization placeholder
                 if show_3d:
-                    st.markdown("### 📊 3D Keypoint Visualization")
+                    st.markdown("### 📊 3D Pose Visualization")
                     viz_3d_placeholder = st.empty()
-                
+
             with col2:
-                st.markdown("## 📊 Statistics")
+                st.markdown("### 📊 Live Football Stats")
                 stats_container = st.container()
-                
-            # Progress tracking
-            progress_bar = st.progress(0)
-            status_text = st.empty()
-            
+
+                # Action analysis
+                st.markdown("### ⚽ Action Analysis")
+                action_container = st.container()
+
+            # Progress and status
+            progress_col1, progress_col2 = st.columns([3, 1])
+            with progress_col1:
+                progress_bar = st.progress(0)
+            with progress_col2:
+                status_text = st.empty()
+
+            # Enhanced pose analytics
+            st.markdown("### 📈 Real-time Pose Analytics")
+            pose_analytics_col1, pose_analytics_col2 = st.columns(2)
+
+            with pose_analytics_col1:
+                action_chart_placeholder = st.empty()
+            with pose_analytics_col2:
+                quality_chart_placeholder = st.empty()
+
             results_data = []
-            
-            # Process video
+            action_history = []
+            quality_history = []
+
+            # Adjust frame delay based on speed multiplier
+            adjusted_delay = frame_delay / speed_multiplier
+
+            # Process video with enhanced pose analytics
+            frame_count = 0
             for frame, stats in self.process_video_stream(temp_video_path):
+                frame_count += 1
+
+                # Apply frame skipping
+                if frame_count % frame_skip != 0:
+                    continue
+
+                start_display_time = time.time()
+
                 # Update video display
                 rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+
+                # Add pose debug overlay if enabled
+                if show_pose_debug:
+                    rgb_frame = self._add_pose_debug_overlay(rgb_frame, stats)
+
                 video_placeholder.image(rgb_frame, channels="RGB", use_container_width=True)
-                
+
                 # Update 3D visualization periodically
-                if show_3d and stats['frame_count'] % 10 == 0:  # Every 10 frames
-                    tracked_results = []  # Would need to pass this from processing
-                    if tracked_results:
-                        fig_3d = self.visualizer.create_3d_visualization(tracked_results)
-                        viz_3d_placeholder.plotly_chart(fig_3d, use_container_width=True)
-                
-                # Update statistics
+                if show_3d and stats['frame_count'] % 15 == 0:  # Every 15 frames for performance
+                    try:
+                        # Create simplified 3D visualization
+                        self._update_3d_pose_viz(viz_3d_placeholder, stats)
+                    except:
+                        pass  # Skip 3D updates if they fail
+
+                # Update enhanced statistics
                 with stats_container:
-                    col_a, col_b = st.columns(2)
-                    with col_a:
-                        st.metric("Football Players", stats['football_players'])
-                        st.metric("Most Common Action", stats['most_common_action'].title())
-                        st.metric("Keypoints", stats['total_keypoints'])
-                    with col_b:
-                        st.metric("Pose Quality", f"{stats['avg_pose_quality']:.2f}")
-                        st.metric("Confidence", f"{stats['avg_confidence']:.2f}")
-                        st.metric("Active Tracks", stats['active_tracks'])
+                    self._update_pose_stats(stats)
 
-                    # Action breakdown
-                    st.markdown("**Actions:**")
-                    action_counts = stats['action_counts']
-                    for action, count in action_counts.items():
-                        if count > 0:
-                            st.text(f"{action.title()}: {count}")
+                # Update action analysis
+                with action_container:
+                    self._update_action_analysis(stats, action_history)
 
-                    # Processing info
-                    st.metric("Processing FPS", f"{stats['processing_fps']:.1f}")
-                    st.metric("Frame", f"{stats['frame_count']}/{stats['total_frames']}")
-                    st.metric("Time", f"{stats['timestamp']:.1f}s")
-                
-                # Update progress
+                # Update real-time pose analytics
+                self._update_pose_analytics(
+                    stats, action_chart_placeholder, quality_chart_placeholder,
+                    action_history, quality_history, results_data
+                )
+
+                # Update progress with enhanced info
                 progress_bar.progress(stats['progress'])
-                status_text.text(f"Processing: {stats['progress']*100:.1f}% complete")
-                
-                # Store data
-                results_data.append(stats)
-                
-                # Control processing speed for display
-                time.sleep(0.03)  # ~30 FPS display
-                
+                status_text.text(
+                    f"Frame {stats['frame_count']}/{stats['total_frames']} "
+                    f"({stats['progress']*100:.1f}%) - "
+                    f"{stats['football_players']} players - "
+                    f"Action: {stats['most_common_action'].title()}"
+                )
+
+                # Store enhanced data
+                enhanced_stats = stats.copy()
+                enhanced_stats.update({
+                    'processing_time': time.time() - start_display_time,
+                    'display_fps': 1.0 / adjusted_delay,
+                    'frame_skip': frame_skip,
+                    'speed_multiplier': speed_multiplier
+                })
+                results_data.append(enhanced_stats)
+
+                # Track action and quality history
+                action_history.append({
+                    'timestamp': stats['timestamp'],
+                    'action': stats['most_common_action'],
+                    'players': stats['football_players'],
+                    'quality': stats['avg_pose_quality']
+                })
+
+                quality_history.append({
+                    'timestamp': stats['timestamp'],
+                    'quality': stats['avg_pose_quality'],
+                    'confidence': stats['avg_confidence']
+                })
+
+                # Keep history manageable
+                if len(action_history) > 100:
+                    action_history.pop(0)
+                if len(quality_history) > 100:
+                    quality_history.pop(0)
+
+                # Smart timing control
+                elapsed_time = time.time() - start_display_time
+                sleep_time = max(0, adjusted_delay - elapsed_time)
+
+                if sleep_time > 0:
+                    time.sleep(sleep_time)
+
             return results_data
             
         finally:
             # Clean up
             if os.path.exists(temp_video_path):
                 os.unlink(temp_video_path)
-                
+
+    def _add_pose_debug_overlay(self, frame, stats):
+        """Add pose debug information overlay to frame"""
+        import cv2
+
+        # Convert to BGR for OpenCV operations
+        bgr_frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+
+        # Add pose debug text
+        debug_info = [
+            f"Players: {stats.get('football_players', 0)}",
+            f"Action: {stats.get('most_common_action', 'standing').title()}",
+            f"Quality: {stats.get('avg_pose_quality', 0):.2f}",
+            f"Confidence: {stats.get('avg_confidence', 0):.2f}",
+            f"Keypoints: {stats.get('total_keypoints', 0)}"
+        ]
+
+        # Draw debug overlay with background
+        overlay = bgr_frame.copy()
+        cv2.rectangle(overlay, (5, 5), (300, 150), (0, 0, 0), -1)
+        cv2.addWeighted(overlay, 0.7, bgr_frame, 0.3, 0, bgr_frame)
+
+        y_offset = 25
+        for i, text in enumerate(debug_info):
+            cv2.putText(bgr_frame, text, (10, y_offset + i * 25),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
+
+        # Convert back to RGB
+        return cv2.cvtColor(bgr_frame, cv2.COLOR_BGR2RGB)
+
+    def _update_pose_stats(self, stats):
+        """Update pose statistics display"""
+        col_a, col_b = st.columns(2)
+
+        with col_a:
+            st.metric("Football Players", stats.get('football_players', 0))
+            st.metric("Total Keypoints", stats.get('total_keypoints', 0))
+            st.metric("Active Tracks", stats.get('active_tracks', 0))
+
+        with col_b:
+            st.metric("Pose Quality", f"{stats.get('avg_pose_quality', 0):.2f}")
+            st.metric("Confidence", f"{stats.get('avg_confidence', 0):.2f}")
+            st.metric("Processing FPS", f"{stats.get('processing_fps', 0):.1f}")
+
+    def _update_action_analysis(self, stats, action_history):
+        """Update action analysis display"""
+        action_counts = stats.get('action_counts', {})
+        most_common = stats.get('most_common_action', 'standing')
+
+        st.markdown(f"**Current Dominant Action: {most_common.title()}**")
+
+        # Show action breakdown
+        for action, count in action_counts.items():
+            if count > 0:
+                percentage = (count / max(sum(action_counts.values()), 1)) * 100
+                st.progress(percentage / 100, text=f"{action.title()}: {count} ({percentage:.1f}%)")
+
+        # Show action trend if we have history
+        if len(action_history) > 5:
+            recent_actions = [item['action'] for item in action_history[-10:]]
+            action_trend = max(set(recent_actions), key=recent_actions.count)
+            st.info(f"🔄 Recent Trend: {action_trend.title()}")
+
+    def _update_3d_pose_viz(self, placeholder, stats):
+        """Update 3D pose visualization (simplified)"""
+        try:
+            import plotly.graph_objects as go
+
+            # Create a simple 3D scatter plot representing pose quality
+            fig = go.Figure()
+
+            # Add dummy 3D points for demonstration
+            fig.add_trace(go.Scatter3d(
+                x=[0, 1, 2],
+                y=[0, 1, 2],
+                z=[0, 1, 2],
+                mode='markers',
+                marker=dict(
+                    size=10,
+                    color=[stats.get('avg_pose_quality', 0.5)] * 3,
+                    colorscale='Viridis',
+                    showscale=True
+                ),
+                name='Pose Quality'
+            ))
+
+            fig.update_layout(
+                title='3D Pose Quality Visualization',
+                scene=dict(
+                    xaxis_title='X',
+                    yaxis_title='Y',
+                    zaxis_title='Z'
+                ),
+                height=400
+            )
+
+            placeholder.plotly_chart(fig, use_container_width=True)
+
+        except Exception as e:
+            placeholder.text("3D visualization temporarily unavailable")
+
+    def _update_pose_analytics(self, stats, action_chart_placeholder, quality_chart_placeholder,
+                             action_history, quality_history, results_data):
+        """Update real-time pose analytics charts"""
+        if len(results_data) > 10:  # Only update after some data is collected
+            try:
+                import pandas as pd
+                import plotly.express as px
+                import plotly.graph_objects as go
+
+                # Action distribution over time
+                if len(action_history) > 5:
+                    action_df = pd.DataFrame(action_history[-30:])  # Last 30 data points
+
+                    # Create action timeline
+                    fig1 = px.scatter(action_df, x='timestamp', y='action',
+                                    size='players', color='quality',
+                                    title='Football Actions Timeline',
+                                    labels={'timestamp': 'Time (s)', 'action': 'Action'},
+                                    color_continuous_scale='Viridis')
+                    fig1.update_layout(height=300, showlegend=False)
+                    action_chart_placeholder.plotly_chart(fig1, use_container_width=True)
+
+                # Quality and confidence over time
+                if len(quality_history) > 5:
+                    quality_df = pd.DataFrame(quality_history[-30:])  # Last 30 data points
+
+                    fig2 = go.Figure()
+                    fig2.add_trace(go.Scatter(
+                        x=quality_df['timestamp'],
+                        y=quality_df['quality'],
+                        mode='lines+markers',
+                        name='Pose Quality',
+                        line=dict(color='green')
+                    ))
+                    fig2.add_trace(go.Scatter(
+                        x=quality_df['timestamp'],
+                        y=quality_df['confidence'],
+                        mode='lines+markers',
+                        name='Confidence',
+                        line=dict(color='blue')
+                    ))
+
+                    fig2.update_layout(
+                        title='Pose Quality & Confidence',
+                        xaxis_title='Time (s)',
+                        yaxis_title='Score',
+                        height=300,
+                        yaxis=dict(range=[0, 1])
+                    )
+                    quality_chart_placeholder.plotly_chart(fig2, use_container_width=True)
+
+            except Exception as e:
+                # Silently handle chart update errors
+                pass
+
     def get_detection_types(self):
         """Get available football analysis types"""
         return {

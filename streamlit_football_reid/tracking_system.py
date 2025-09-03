@@ -726,11 +726,40 @@ class EnhancedFootballTracker:
         return annotated_frame
         
     def get_statistics(self):
-        """Get current tracking statistics"""
+        """Get enhanced tracking statistics with analytics"""
         active_players = len([p for p in self.players.values() if p['time_since_seen'] == 0])
         total_active = len(self.players)
         gallery_players = len(self.player_gallery)
         available_ids = len(self.available_ids)
+
+        # Calculate additional analytics
+        total_appearances = sum(p.get('total_appearances', 1) for p in self.players.values())
+        avg_confidence = np.mean([p.get('confidence', 0.5) for p in self.players.values()]) if self.players else 0.0
+
+        # Track player movements and velocities
+        moving_players = 0
+        total_velocity = 0
+        stable_tracks = 0
+
+        for player in self.players.values():
+            if player['time_since_seen'] == 0:
+                # Calculate velocity magnitude
+                velocity = player.get('velocity', [0, 0])
+                if isinstance(velocity, (list, np.ndarray)) and len(velocity) >= 2:
+                    velocity_mag = np.sqrt(velocity[0]**2 + velocity[1]**2)
+                    total_velocity += velocity_mag
+                    if velocity_mag > 0.01:  # Movement threshold
+                        moving_players += 1
+
+                # Count stable tracks (appeared multiple times)
+                if player.get('total_appearances', 1) > 5:
+                    stable_tracks += 1
+
+        avg_velocity = total_velocity / max(active_players, 1)
+        tracking_efficiency = stable_tracks / max(total_active, 1)
+
+        # Calculate ID pool efficiency
+        id_pool_efficiency = (self.MAX_PLAYERS - available_ids) / self.MAX_PLAYERS
 
         return {
             'frame_count': self.frame_count,
@@ -741,7 +770,15 @@ class EnhancedFootballTracker:
             'max_players': self.MAX_PLAYERS,
             'tracker_type': self.tracker_type,
             'model_type': self.yolo_model_name,
-            'id_pool_usage': f"{self.MAX_PLAYERS - available_ids}/{self.MAX_PLAYERS}"
+            'id_pool_usage': f"{self.MAX_PLAYERS - available_ids}/{self.MAX_PLAYERS}",
+            'total_appearances': total_appearances,
+            'avg_confidence': avg_confidence,
+            'moving_players': moving_players,
+            'avg_velocity': avg_velocity,
+            'stable_tracks': stable_tracks,
+            'tracking_efficiency': tracking_efficiency,
+            'id_pool_efficiency': id_pool_efficiency,
+            'active_tracks': active_players  # For compatibility
         }
         
     def reset(self):
