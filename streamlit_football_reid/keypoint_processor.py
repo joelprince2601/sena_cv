@@ -163,7 +163,7 @@ class StreamlitKeypointProcessor:
                 with control_col1:
                     speed_multiplier = st.selectbox("Analysis Speed", [0.5, 1.0, 1.5, 2.0], index=1, key="pose_speed")
                 with control_col2:
-                    frame_skip = st.selectbox("Frame Skip", [1, 2, 3, 5], index=0, key="pose_skip")
+                    frame_skip = st.selectbox("Frame Skip", [0.1,0.5, 1.0, 1.5, 2.0], index=0, key="pose_skip")
                 with control_col3:
                     show_pose_debug = st.checkbox("Pose Debug", value=False)
 
