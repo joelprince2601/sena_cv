@@ -84,7 +84,7 @@ class StreamlitKeypointProcessor:
         football_players = len(tracked_results)
 
         # Count actions
-        action_counts = {'standing': 0, 'running': 0, 'kicking': 0, 'jumping': 0, 'crouching': 0}
+        action_counts = {'standing': 0, 'running': 0, 'kicking': 0, 'jumping': 0, 'moving': 0}
         for result in tracked_results:
             action = result.get('action_analysis', {}).get('action', 'standing')
             if action in action_counts:
@@ -460,13 +460,13 @@ class StreamlitKeypointProcessor:
                 "name": "Football Pose Analysis",
                 "description": "Full body pose analysis for football players (33 keypoints + actions)",
                 "keypoints": 33,
-                "actions": ["standing", "running", "kicking", "jumping", "crouching"]
+                "actions": ["standing", "running", "kicking", "jumping", "moving"]
             },
             "advanced_football": {
                 "name": "Advanced Football Analysis",
                 "description": "Detailed pose analysis with action recognition and biomechanics",
                 "keypoints": 33,
-                "actions": ["standing", "running", "kicking", "jumping", "crouching", "diving"]
+                "actions": ["standing", "running", "kicking", "jumping", "moving", "diving"]
             }
         }
         
