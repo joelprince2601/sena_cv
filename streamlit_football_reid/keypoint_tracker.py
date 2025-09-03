@@ -28,7 +28,7 @@ class FootballPoseAnalyzer:
             'kicking': 0,
             'jumping': 0,
             'standing': 0,
-            'crouching': 0,
+            'moving': 0,
             'diving': 0
         }
         
@@ -250,14 +250,14 @@ class FootballPoseAnalyzer:
             kick_score = self._detect_kicking(joints, landmarks)
             jump_score = self._detect_jumping(joints, landmarks)
             run_score = self._detect_running(joints, landmarks)
-            crouch_score = self._detect_crouching(joints, landmarks)
+            crouch_score = self._detect_moving(joints, landmarks)
 
             # Determine primary action
             action_scores = {
                 'kicking': kick_score,
                 'jumping': jump_score,
                 'running': run_score,
-                'crouching': crouch_score
+                'moving': crouch_score
             }
 
             best_action = max(action_scores, key=action_scores.get)
@@ -362,8 +362,8 @@ class FootballPoseAnalyzer:
 
         return 0.0
 
-    def _detect_crouching(self, joints, landmarks):
-        """Detect crouching/low stance"""
+    def _detect_moving(self, joints, landmarks):
+        """Detect moving/low stance"""
         try:
             if all(joint in joints for joint in ['left_hip', 'left_knee', 'right_hip', 'right_knee']):
 
@@ -472,7 +472,7 @@ class FootballPoseAnalyzer:
             details['stride_pattern'] = self._analyze_stride_pattern(joints)
             details['body_lean'] = self._calculate_body_lean(joints)
 
-        elif action == 'crouching':
+        elif action == 'moving':
             details['crouch_depth'] = self._calculate_crouch_depth(joints)
             details['balance'] = self._assess_balance(joints)
 
@@ -818,7 +818,7 @@ class FootballPoseAnalyzer:
                             if self.frame_count - p['last_seen'] <= 5])
 
         # Count actions
-        action_counts = {'standing': 0, 'running': 0, 'kicking': 0, 'jumping': 0, 'crouching': 0}
+        action_counts = {'standing': 0, 'running': 0, 'kicking': 0, 'jumping': 0, 'moving': 0}
         total_confidence = 0
         pose_qualities = []
 
