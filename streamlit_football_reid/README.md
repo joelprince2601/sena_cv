@@ -1,42 +1,64 @@
-# Football Player Re-ID Streamlit Application
+# ⚽ Football Player Re-ID System
 
 A modern web-based application for football player tracking and re-identification using state-of-the-art computer vision techniques.
 
-## Features
+[![Streamlit App](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://your-app-url.streamlit.app)
 
-- **Multiple YOLO Models**: Support for YOLOv8 variants (nano, small, medium, large, extra-large)
-- **Advanced Tracking**: Integration with OC-SORT, ByteTrack, and custom re-identification
-- **Real-time Processing**: Live video processing with real-time statistics
-- **Interactive Web Interface**: Modern Streamlit-based UI with drag-and-drop file upload
-- **Analytics Dashboard**: Comprehensive analytics with charts and metrics
-- **Performance Monitoring**: Real-time FPS and processing statistics
+## 🚀 Features
 
-## Installation
+- **YOLOv8 Detection**: Multiple model variants for different speed/accuracy needs
+- **Enhanced Re-ID**: Custom tracking with deep re-identification features
+- **Real-time Processing**: Live video processing with progress tracking
+- **Interactive Interface**: Modern Streamlit UI with drag-and-drop upload
+- **Analytics Dashboard**: Comprehensive statistics and visualizations
+- **Cloud Deployment**: Optimized for Streamlit Cloud deployment
 
-1. **Clone or navigate to the project directory**
+## 🚀 Quick Start
+
+### Local Installation
+
+1. **Clone the repository**
+
    ```bash
+   git clone <your-repo-url>
    cd streamlit_football_reid
    ```
 
 2. **Install dependencies**
+
    ```bash
    pip install -r requirements.txt
    ```
 
 3. **Run the application**
    ```bash
-   python run_app.py
-   ```
-   
-   Or directly with Streamlit:
-   ```bash
    streamlit run app.py
    ```
+
+### 🌐 Deploy to Streamlit Cloud
+
+1. **Fork this repository** to your GitHub account
+
+2. **Go to [share.streamlit.io](https://share.streamlit.io)**
+
+3. **Deploy your app**:
+
+   - Repository: `your-username/your-repo-name`
+   - Branch: `main`
+   - Main file path: `streamlit_football_reid/app.py`
+
+4. **The app will automatically install dependencies** from `requirements.txt` and `packages.txt`
+
+### 📁 Required Files for Deployment
+
+- `requirements.txt` - Python dependencies
+- `packages.txt` - System dependencies
+- `.streamlit/config.toml` - Streamlit configuration
 
 ## Usage
 
 1. **Upload Video**: Drag and drop a football video file (MP4, AVI, MOV, MKV, WMV)
-2. **Configure Parameters**: 
+2. **Configure Parameters**:
    - Choose YOLO model (YOLOv8n for speed, YOLOv8x for accuracy)
    - Select tracker (OC-SORT recommended for accuracy, ByteTrack for speed)
    - Adjust detection and re-identification thresholds
@@ -46,18 +68,21 @@ A modern web-based application for football player tracking and re-identificatio
 ## Configuration Options
 
 ### YOLO Models
+
 - **YOLOv8n**: Fastest, lowest accuracy
-- **YOLOv8s**: Fast, good accuracy  
+- **YOLOv8s**: Fast, good accuracy
 - **YOLOv8m**: Balanced speed/accuracy
 - **YOLOv8l**: Slow, high accuracy
 - **YOLOv8x**: Slowest, highest accuracy
 
 ### Tracking Algorithms
+
 - **OC-SORT**: Observation-centric SORT with improved association
 - **ByteTrack**: Fast and accurate multi-object tracking
 - **Custom ReID**: Custom tracker with deep re-identification features
 
 ### Parameters
+
 - **Confidence Threshold**: Minimum confidence for player detections (0.1-1.0)
 - **NMS Threshold**: Non-maximum suppression threshold (0.1-1.0)
 - **Re-ID Threshold**: Re-identification similarity threshold (0.1-1.0)

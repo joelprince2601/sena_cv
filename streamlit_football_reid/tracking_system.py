@@ -37,22 +37,30 @@ except ImportError:
     SKLEARN_AVAILABLE = False
     print("Scikit-learn not available")
 
-# Add OC_SORT to path
-sys.path.append(str(Path(__file__).parent.parent / "OC_SORT"))
+# Try to import external trackers (optional for deployment)
+OCSORT_AVAILABLE = False
+BYTETRACK_AVAILABLE = False
 
-try:
-    from trackers.ocsort_tracker.ocsort import OCSort
-    OCSORT_AVAILABLE = True
-except ImportError:
-    OCSORT_AVAILABLE = False
-    print("OC-SORT not available")
+# Add OC_SORT to path if available
+ocsort_path = Path(__file__).parent.parent / "OC_SORT"
+if ocsort_path.exists():
+    sys.path.append(str(ocsort_path))
 
-try:
-    from trackers.byte_tracker.byte_tracker import BYTETracker
-    BYTETRACK_AVAILABLE = True
-except ImportError:
-    BYTETRACK_AVAILABLE = False
-    print("ByteTrack not available")
+    try:
+        from trackers.ocsort_tracker.ocsort import OCSort
+        OCSORT_AVAILABLE = True
+        print("✅ OC-SORT available")
+    except ImportError:
+        print("⚠️ OC-SORT not available")
+
+    try:
+        from trackers.byte_tracker.byte_tracker import BYTETracker
+        BYTETRACK_AVAILABLE = True
+        print("✅ ByteTrack available")
+    except ImportError:
+        print("⚠️ ByteTrack not available")
+else:
+    print("⚠️ OC_SORT directory not found - using custom tracker only")
 
 from config import DEFAULT_PARAMS, get_player_color
 
@@ -91,25 +99,40 @@ class EnhancedFootballTracker:
     def _initialize_tracker(self, **kwargs):
         """Initialize the selected tracker"""
         if self.tracker_type == "ocsort" and OCSORT_AVAILABLE:
-            return OCSort(
-                det_thresh=kwargs.get('det_thresh', 0.5),
-                max_age=kwargs.get('max_age', 30),
-                min_hits=kwargs.get('min_hits', 3),
-                iou_threshold=kwargs.get('iou_threshold', 0.3)
-            )
+            try:
+                return OCSort(
+                    det_thresh=kwargs.get('det_thresh', 0.5),
+                    max_age=kwargs.get('max_age', 30),
+                    min_hits=kwargs.get('min_hits', 3),
+                    iou_threshold=kwargs.get('iou_threshold', 0.3)
+                )
+            except Exception as e:
+                print(f"⚠️ Failed to initialize OC-SORT: {e}")
+                print("🔄 Falling back to custom tracker")
+                self.tracker_type = "custom"
+                return None
         elif self.tracker_type == "bytetrack" and BYTETRACK_AVAILABLE:
-            # Create a simple args object for ByteTracker
-            class Args:
-                def __init__(self):
-                    self.track_thresh = kwargs.get('track_thresh', 0.5)
-                    self.track_buffer = kwargs.get('track_buffer', 30)
-                    self.match_thresh = kwargs.get('match_thresh', 0.8)
-                    self.mot20 = False
+            try:
+                # Create a simple args object for ByteTracker
+                class Args:
+                    def __init__(self):
+                        self.track_thresh = kwargs.get('track_thresh', 0.5)
+                        self.track_buffer = kwargs.get('track_buffer', 30)
+                        self.match_thresh = kwargs.get('match_thresh', 0.8)
+                        self.mot20 = False
 
-            args = Args()
-            return BYTETracker(args, frame_rate=kwargs.get('frame_rate', 30))
+                args = Args()
+                return BYTETracker(args, frame_rate=kwargs.get('frame_rate', 30))
+            except Exception as e:
+                print(f"⚠️ Failed to initialize ByteTrack: {e}")
+                print("🔄 Falling back to custom tracker")
+                self.tracker_type = "custom"
+                return None
         else:
-            # Custom tracker
+            # Custom tracker or fallback
+            if self.tracker_type != "custom":
+                print(f"⚠️ {self.tracker_type} not available, using custom tracker")
+                self.tracker_type = "custom"
             return None
             
     def _initialize_feature_extractor(self):

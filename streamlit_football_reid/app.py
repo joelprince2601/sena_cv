@@ -76,11 +76,29 @@ def create_sidebar():
         index=0
     )
     
-    # Tracker selection
+    # Tracker selection - check availability
     st.sidebar.markdown("### 🎯 Tracker Type")
+
+    # Import here to check availability
+    try:
+        from tracking_system import OCSORT_AVAILABLE, BYTETRACK_AVAILABLE
+
+        # Update availability in config
+        TRACKER_CONFIGS["ocsort"]["available"] = OCSORT_AVAILABLE
+        TRACKER_CONFIGS["bytetrack"]["available"] = BYTETRACK_AVAILABLE
+
+        # Filter available trackers
+        available_trackers = [k for k, v in TRACKER_CONFIGS.items() if v.get("available", True)]
+
+        if not available_trackers:
+            available_trackers = ["custom"]  # Fallback
+
+    except ImportError:
+        available_trackers = ["custom"]  # Safe fallback
+
     selected_tracker = st.sidebar.selectbox(
         "Choose tracking algorithm:",
-        options=list(TRACKER_CONFIGS.keys()),
+        options=available_trackers,
         format_func=lambda x: f"{TRACKER_CONFIGS[x]['name']} - {TRACKER_CONFIGS[x]['description']}",
         index=0
     )
