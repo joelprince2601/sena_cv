@@ -48,7 +48,7 @@ YOLO_MODELS = {
 TRACKER_CONFIGS = {
     "custom": {
         "name": "Custom ReID",
-        "description": "Enhanced tracker with deep re-identification features (Always Available)",
+        "description": "Enhanced tracker with deep re-identification features",
         "params": {
             "reid_threshold": 0.7,
             "max_age": 150,
@@ -58,25 +58,25 @@ TRACKER_CONFIGS = {
     },
     "ocsort": {
         "name": "OC-SORT",
-        "description": "Observation-centric SORT with improved association (Requires OC_SORT)",
+        "description": "Observation-centric SORT with improved association",
         "params": {
             "det_thresh": 0.5,
             "max_age": 30,
             "min_hits": 3,
             "iou_threshold": 0.3
         },
-        "available": False  # Will be updated at runtime
+        "available": True  # Always available with simplified version
     },
     "bytetrack": {
         "name": "ByteTrack",
-        "description": "Fast and accurate multi-object tracking (Requires ByteTrack)",
+        "description": "Fast and accurate multi-object tracking",
         "params": {
             "track_thresh": 0.5,
             "track_buffer": 30,
             "match_thresh": 0.8,
             "frame_rate": 30
         },
-        "available": False  # Will be updated at runtime
+        "available": True  # Always available with simplified version
     }
 }
 

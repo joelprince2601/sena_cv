@@ -37,7 +37,16 @@ except ImportError:
     SKLEARN_AVAILABLE = False
     print("Scikit-learn not available")
 
-# Try to import external trackers (optional for deployment)
+# Import simplified trackers (always available)
+try:
+    from simple_trackers import SimpleBYTETracker, SimpleOCSORT
+    SIMPLE_TRACKERS_AVAILABLE = True
+    print("✅ Simplified trackers available")
+except ImportError:
+    SIMPLE_TRACKERS_AVAILABLE = False
+    print("⚠️ Simplified trackers not available")
+
+# Try to import external trackers (optional)
 OCSORT_AVAILABLE = False
 BYTETRACK_AVAILABLE = False
 
@@ -49,18 +58,25 @@ if ocsort_path.exists():
     try:
         from trackers.ocsort_tracker.ocsort import OCSort
         OCSORT_AVAILABLE = True
-        print("✅ OC-SORT available")
+        print("✅ External OC-SORT available")
     except ImportError:
-        print("⚠️ OC-SORT not available")
+        print("⚠️ External OC-SORT not available")
 
     try:
         from trackers.byte_tracker.byte_tracker import BYTETracker
         BYTETRACK_AVAILABLE = True
-        print("✅ ByteTrack available")
+        print("✅ External ByteTrack available")
     except ImportError:
-        print("⚠️ ByteTrack not available")
-else:
-    print("⚠️ OC_SORT directory not found - using custom tracker only")
+        print("⚠️ External ByteTrack not available")
+
+# Ensure trackers are always available using simplified versions
+if not OCSORT_AVAILABLE and SIMPLE_TRACKERS_AVAILABLE:
+    OCSORT_AVAILABLE = True
+    print("✅ Using simplified OC-SORT")
+
+if not BYTETRACK_AVAILABLE and SIMPLE_TRACKERS_AVAILABLE:
+    BYTETRACK_AVAILABLE = True
+    print("✅ Using simplified ByteTrack")
 
 from config import DEFAULT_PARAMS, get_player_color
 
@@ -78,19 +94,22 @@ class EnhancedFootballTracker:
         self.confidence_threshold = confidence_threshold
         self.nms_threshold = nms_threshold
         self.reid_threshold = reid_threshold
-        
+
         # Initialize YOLO model
         if ULTRALYTICS_AVAILABLE:
             self.yolo_model = YOLO(yolo_model)
         else:
             raise ImportError("Ultralytics YOLO not available. Please install: pip install ultralytics")
-        
+
         # Initialize tracker
         self.tracker = self._initialize_tracker(**kwargs)
-        
-        # Player management
+
+        # Player management with fixed ID pool
+        self.MAX_PLAYERS = 12  # Maximum number of unique player IDs
         self.next_id = 1
-        self.players = {}
+        self.players = {}  # Active players: {id: player_info}
+        self.player_gallery = {}  # Long-term player memory: {id: consolidated_features}
+        self.available_ids = list(range(1, self.MAX_PLAYERS + 1))  # Pool of available IDs
         self.frame_count = 0
         
         # Feature extraction for re-identification
@@ -100,39 +119,73 @@ class EnhancedFootballTracker:
         """Initialize the selected tracker"""
         if self.tracker_type == "ocsort" and OCSORT_AVAILABLE:
             try:
-                return OCSort(
-                    det_thresh=kwargs.get('det_thresh', 0.5),
-                    max_age=kwargs.get('max_age', 30),
-                    min_hits=kwargs.get('min_hits', 3),
-                    iou_threshold=kwargs.get('iou_threshold', 0.3)
-                )
+                # Try external OC-SORT first, then simplified version
+                if 'OCSort' in globals():
+                    return OCSort(
+                        det_thresh=kwargs.get('det_thresh', 0.5),
+                        max_age=kwargs.get('max_age', 30),
+                        min_hits=kwargs.get('min_hits', 3),
+                        iou_threshold=kwargs.get('iou_threshold', 0.3)
+                    )
+                else:
+                    # Use simplified OC-SORT
+                    return SimpleOCSORT(
+                        det_thresh=kwargs.get('det_thresh', 0.5),
+                        max_age=kwargs.get('max_age', 30),
+                        min_hits=kwargs.get('min_hits', 3),
+                        iou_threshold=kwargs.get('iou_threshold', 0.3)
+                    )
             except Exception as e:
                 print(f"⚠️ Failed to initialize OC-SORT: {e}")
-                print("🔄 Falling back to custom tracker")
-                self.tracker_type = "custom"
-                return None
+                print("🔄 Falling back to simplified OC-SORT")
+                try:
+                    return SimpleOCSORT(
+                        det_thresh=kwargs.get('det_thresh', 0.5),
+                        max_age=kwargs.get('max_age', 30),
+                        min_hits=kwargs.get('min_hits', 3),
+                        iou_threshold=kwargs.get('iou_threshold', 0.3)
+                    )
+                except:
+                    print("🔄 Falling back to custom tracker")
+                    self.tracker_type = "custom"
+                    return None
+
         elif self.tracker_type == "bytetrack" and BYTETRACK_AVAILABLE:
             try:
-                # Create a simple args object for ByteTracker
-                class Args:
-                    def __init__(self):
-                        self.track_thresh = kwargs.get('track_thresh', 0.5)
-                        self.track_buffer = kwargs.get('track_buffer', 30)
-                        self.match_thresh = kwargs.get('match_thresh', 0.8)
-                        self.mot20 = False
+                # Try external ByteTrack first, then simplified version
+                if 'BYTETracker' in globals():
+                    # Create a simple args object for external ByteTracker
+                    class Args:
+                        def __init__(self):
+                            self.track_thresh = kwargs.get('track_thresh', 0.5)
+                            self.track_buffer = kwargs.get('track_buffer', 30)
+                            self.match_thresh = kwargs.get('match_thresh', 0.8)
+                            self.mot20 = False
 
-                args = Args()
-                return BYTETracker(args, frame_rate=kwargs.get('frame_rate', 30))
+                    args = Args()
+                    return BYTETracker(args, frame_rate=kwargs.get('frame_rate', 30))
+                else:
+                    # Use simplified ByteTrack
+                    return SimpleBYTETracker(
+                        track_thresh=kwargs.get('track_thresh', 0.5),
+                        track_buffer=kwargs.get('track_buffer', 30),
+                        match_thresh=kwargs.get('match_thresh', 0.8)
+                    )
             except Exception as e:
                 print(f"⚠️ Failed to initialize ByteTrack: {e}")
-                print("🔄 Falling back to custom tracker")
-                self.tracker_type = "custom"
-                return None
+                print("🔄 Falling back to simplified ByteTrack")
+                try:
+                    return SimpleBYTETracker(
+                        track_thresh=kwargs.get('track_thresh', 0.5),
+                        track_buffer=kwargs.get('track_buffer', 30),
+                        match_thresh=kwargs.get('match_thresh', 0.8)
+                    )
+                except:
+                    print("🔄 Falling back to custom tracker")
+                    self.tracker_type = "custom"
+                    return None
         else:
-            # Custom tracker or fallback
-            if self.tracker_type != "custom":
-                print(f"⚠️ {self.tracker_type} not available, using custom tracker")
-                self.tracker_type = "custom"
+            # Custom tracker
             return None
             
     def _initialize_feature_extractor(self):
@@ -262,8 +315,8 @@ class EnhancedFootballTracker:
                 return []
                 
     def _custom_tracking(self, frame, detections):
-        """Enhanced custom tracking with improved re-identification"""
-        # Update time since last seen for all players
+        """Fixed ID pool tracking with maximum 12 persistent player IDs"""
+        # Update time since last seen for all active players
         for player_id in self.players:
             self.players[player_id]['time_since_seen'] += 1
             self.players[player_id]['matched_this_frame'] = False
@@ -277,7 +330,7 @@ class EnhancedFootballTracker:
         else:
             sorted_detections = []
 
-        # Match detections with existing players using multi-stage matching
+        # Match detections with existing players using comprehensive matching
         for detection in sorted_detections:
             x1, y1, x2, y2, conf = detection
             bbox = [x1, y1, x2, y2]
@@ -290,107 +343,180 @@ class EnhancedFootballTracker:
             best_match_id = None
             best_score = 0
 
-            # Stage 1: High confidence spatial matching for recent tracks
+            # Stage 1: Match with active players (recently seen)
             for player_id, player_info in self.players.items():
                 if player_info.get('matched_this_frame', False):
                     continue
 
-                # For recently seen players, prioritize spatial continuity
-                if player_info['time_since_seen'] <= 5:
-                    iou = self._calculate_iou(bbox, player_info['bbox'])
-                    motion_consistency = self._calculate_motion_consistency(bbox, player_info)
+                # Calculate comprehensive similarity
+                similarity_score = self._calculate_comprehensive_similarity(
+                    bbox, features, player_info, conf)
 
-                    # High spatial score for recent tracks
-                    spatial_score = iou * 0.7 + motion_consistency * 0.3
+                if similarity_score > best_score and similarity_score > 0.3:
+                    best_match_id = player_id
+                    best_score = similarity_score
 
-                    if spatial_score > 0.3:  # Lower threshold for spatial matching
-                        feature_similarity = self._calculate_similarity(features, player_info['features'])
-                        combined_score = spatial_score * 0.6 + feature_similarity * 0.4
-
-                        if combined_score > best_score:
-                            best_match_id = player_id
-                            best_score = combined_score
-
-            # Stage 2: Feature-based matching for older tracks
+            # Stage 2: If no active match, check player gallery (long-term memory)
             if best_match_id is None:
-                for player_id, player_info in self.players.items():
-                    if player_info.get('matched_this_frame', False):
-                        continue
+                gallery_match_id, gallery_score = self._match_with_gallery(features, bbox)
 
-                    # For older tracks, rely more on features
-                    feature_similarity = self._calculate_similarity(features, player_info['features'])
+                if gallery_match_id is not None and gallery_score > 0.6:
+                    # Reactivate player from gallery
+                    best_match_id = gallery_match_id
+                    best_score = gallery_score
 
-                    # Apply time decay to similarity
-                    time_decay = max(0.1, 1.0 - (player_info['time_since_seen'] / 50.0))
-                    adjusted_similarity = feature_similarity * time_decay
+                    # Move from gallery back to active players
+                    self.players[gallery_match_id] = {
+                        'bbox': bbox,
+                        'features': self.player_gallery[gallery_match_id]['features'],
+                        'time_since_seen': 0,
+                        'matched_this_frame': True,
+                        'confidence': conf,
+                        'last_position': bbox,
+                        'velocity': [0, 0],
+                        'reactivation_count': self.player_gallery[gallery_match_id].get('reactivation_count', 0) + 1,
+                        'total_appearances': self.player_gallery[gallery_match_id].get('total_appearances', 1) + 1
+                    }
 
-                    # Consider spatial proximity with lower weight
-                    if player_info['time_since_seen'] < 30:
-                        iou = self._calculate_iou(bbox, player_info['bbox'])
-                        adjusted_similarity = adjusted_similarity * 0.8 + iou * 0.2
-
-                    if adjusted_similarity > self.reid_threshold and adjusted_similarity > best_score:
-                        best_match_id = player_id
-                        best_score = adjusted_similarity
+                    print(f"🔄 Reactivated player ID {gallery_match_id} (appearances: {self.players[gallery_match_id]['total_appearances']})")
 
             # Update matched player or store as unmatched
             if best_match_id is not None:
-                # Update existing player with enhanced feature updating
-                old_features = self.players[best_match_id]['features']
-
-                # Adaptive feature update based on confidence and time
-                confidence_weight = min(conf, 0.9)  # Cap confidence influence
-                time_weight = max(0.1, 1.0 - (self.players[best_match_id]['time_since_seen'] / 20.0))
-                update_rate = confidence_weight * time_weight * 0.3  # Conservative update
-
-                updated_features = self._update_features(old_features, features, alpha=1-update_rate)
-
-                # Update player info
-                self.players[best_match_id].update({
-                    'bbox': bbox,
-                    'features': updated_features,
-                    'time_since_seen': 0,
-                    'matched_this_frame': True,
-                    'confidence': conf,
-                    'last_position': bbox,
-                    'velocity': self._calculate_velocity(bbox, player_info.get('last_position', bbox))
-                })
-
+                self._update_matched_player(best_match_id, bbox, features, conf)
                 matched_tracks.append([x1, y1, x2, y2, best_match_id, conf])
             else:
                 unmatched_detections.append((bbox, features, conf))
 
-        # Assign new IDs to unmatched detections (with minimum confidence threshold)
+        # Handle unmatched detections - assign new IDs only if we have available slots
         for bbox, features, conf in unmatched_detections:
-            if conf > 0.4:  # Only create new tracks for confident detections
-                self.players[self.next_id] = {
-                    'bbox': bbox,
-                    'features': features,
-                    'features_history': [features],
-                    'time_since_seen': 0,
-                    'matched_this_frame': True,
-                    'confidence': conf,
-                    'last_position': bbox,
-                    'velocity': [0, 0],
-                    'creation_frame': self.frame_count
-                }
-                x1, y1, x2, y2 = bbox
-                matched_tracks.append([x1, y1, x2, y2, self.next_id, conf])
-                self.next_id += 1
+            if conf > 0.5:  # Higher threshold for new players
+                assigned_id = self._assign_new_player_id(bbox, features, conf)
+                if assigned_id is not None:
+                    x1, y1, x2, y2 = bbox
+                    matched_tracks.append([x1, y1, x2, y2, assigned_id, conf])
+                    print(f"🆕 Assigned new player ID {assigned_id} (total active: {len(self.players)})")
 
-        # Remove old tracks with adaptive thresholds
-        players_to_remove = []
-        for player_id, player_info in self.players.items():
-            # More aggressive removal for low-confidence tracks
-            max_age = 200 if player_info.get('confidence', 0) > 0.7 else 100
-
-            if player_info['time_since_seen'] > max_age:
-                players_to_remove.append(player_id)
-
-        for pid in players_to_remove:
-            del self.players[pid]
+        # Move inactive players to gallery (long-term memory)
+        self._manage_player_lifecycle()
 
         return matched_tracks
+
+    def _calculate_comprehensive_similarity(self, bbox, features, player_info, conf):
+        """Calculate comprehensive similarity score for matching"""
+        time_since_seen = player_info['time_since_seen']
+
+        # Feature similarity (primary)
+        feature_sim = self._calculate_similarity(features, player_info['features'])
+
+        # Spatial continuity (important for recent tracks)
+        spatial_score = 0
+        if time_since_seen <= 10:
+            spatial_iou = self._calculate_iou(bbox, player_info['bbox'])
+            motion_consistency = self._calculate_motion_consistency(bbox, player_info)
+            spatial_score = spatial_iou * 0.6 + motion_consistency * 0.4
+
+        # Time decay factor
+        time_factor = max(0.2, 1.0 - (time_since_seen / 100.0))
+
+        # Confidence boost for high-confidence detections
+        conf_boost = min(conf, 0.9) * 0.1
+
+        # Combine scores based on track age
+        if time_since_seen <= 5:
+            # Recent tracks: prioritize spatial continuity
+            combined_score = (spatial_score * 0.6 + feature_sim * 0.4) * time_factor + conf_boost
+        elif time_since_seen <= 20:
+            # Medium age: balance spatial and features
+            combined_score = (spatial_score * 0.4 + feature_sim * 0.6) * time_factor + conf_boost
+        else:
+            # Old tracks: rely on features
+            combined_score = feature_sim * time_factor + conf_boost
+
+        return combined_score
+
+    def _match_with_gallery(self, features, bbox):
+        """Match detection with players in long-term gallery"""
+        best_match_id = None
+        best_score = 0
+
+        for player_id, gallery_info in self.player_gallery.items():
+            # Skip if player is currently active
+            if player_id in self.players:
+                continue
+
+            # Calculate feature similarity with gallery features
+            feature_sim = self._calculate_similarity(features, gallery_info['features'])
+
+            # Boost score for players with more appearances (more reliable)
+            appearance_boost = min(gallery_info.get('total_appearances', 1) / 10.0, 0.2)
+
+            # Time decay since last seen
+            frames_since_gallery = self.frame_count - gallery_info.get('last_seen_frame', 0)
+            time_decay = max(0.3, 1.0 - (frames_since_gallery / 1000.0))
+
+            final_score = (feature_sim + appearance_boost) * time_decay
+
+            if final_score > best_score:
+                best_match_id = player_id
+                best_score = final_score
+
+        return best_match_id, best_score
+
+    def _assign_new_player_id(self, bbox, features, conf):
+        """Assign a new player ID from available pool"""
+        if not self.available_ids:
+            # No available IDs - try to reclaim from gallery
+            reclaimed_id = self._reclaim_id_from_gallery()
+            if reclaimed_id is not None:
+                self.available_ids.append(reclaimed_id)
+            else:
+                print(f"⚠️ Maximum players ({self.MAX_PLAYERS}) reached - cannot assign new ID")
+                return None
+
+        # Get the next available ID
+        new_id = self.available_ids.pop(0)
+
+        # Create new player
+        self.players[new_id] = {
+            'bbox': bbox,
+            'features': features,
+            'time_since_seen': 0,
+            'matched_this_frame': True,
+            'confidence': conf,
+            'last_position': bbox,
+            'velocity': [0, 0],
+            'creation_frame': self.frame_count,
+            'total_appearances': 1
+        }
+
+        return new_id
+
+    def _reclaim_id_from_gallery(self):
+        """Reclaim an ID from the gallery (remove least reliable player)"""
+        if not self.player_gallery:
+            return None
+
+        # Find player with lowest reliability score
+        worst_player_id = None
+        worst_score = float('inf')
+
+        for player_id, gallery_info in self.player_gallery.items():
+            # Calculate reliability score (lower is worse)
+            appearances = gallery_info.get('total_appearances', 1)
+            frames_since_seen = self.frame_count - gallery_info.get('last_seen_frame', 0)
+
+            reliability_score = appearances - (frames_since_seen / 100.0)
+
+            if reliability_score < worst_score:
+                worst_score = reliability_score
+                worst_player_id = player_id
+
+        if worst_player_id is not None:
+            del self.player_gallery[worst_player_id]
+            print(f"🗑️ Reclaimed ID {worst_player_id} from gallery")
+            return worst_player_id
+
+        return None
         
     def _process_external_tracks(self, frame, tracks):
         """Process tracks from external trackers"""
@@ -481,6 +607,94 @@ class EnhancedFootballTracker:
                    current_center[1] - last_center[1]]
 
         return velocity
+
+    def _predict_next_position(self, player_info):
+        """Predict next position based on velocity and position history"""
+        if 'velocity' not in player_info or 'last_position' not in player_info:
+            return player_info['bbox']
+
+        last_bbox = player_info['last_position']
+        velocity = player_info['velocity']
+
+        # Apply velocity with damping for multiple frames
+        frames_ahead = player_info['time_since_seen']
+        damping = max(0.5, 1.0 - frames_ahead * 0.1)  # Reduce prediction confidence over time
+
+        predicted_x = last_bbox[0] + velocity[0] * frames_ahead * damping
+        predicted_y = last_bbox[1] + velocity[1] * frames_ahead * damping
+
+        # Keep same size
+        width = last_bbox[2] - last_bbox[0]
+        height = last_bbox[3] - last_bbox[1]
+
+        return [predicted_x, predicted_y, predicted_x + width, predicted_y + height]
+
+    def _update_matched_player(self, player_id, bbox, features, conf):
+        """Update matched player with new detection"""
+        player_info = self.players[player_id]
+
+        # Calculate velocity
+        velocity = self._calculate_velocity(bbox, player_info.get('last_position', bbox))
+
+        # Conservative feature update to maintain identity
+        old_features = player_info['features']
+        time_weight = max(0.1, 1.0 - (player_info['time_since_seen'] / 30.0))
+        conf_weight = min(conf, 0.9)
+        update_rate = time_weight * conf_weight * 0.2  # Very conservative
+
+        updated_features = self._update_features(old_features, features, alpha=1-update_rate)
+
+        # Update player info
+        self.players[player_id].update({
+            'bbox': bbox,
+            'features': updated_features,
+            'time_since_seen': 0,
+            'matched_this_frame': True,
+            'confidence': conf,
+            'last_position': player_info['bbox'],  # Store previous position
+            'velocity': velocity,
+            'total_appearances': player_info.get('total_appearances', 1) + 1
+        })
+
+    def _manage_player_lifecycle(self):
+        """Manage player lifecycle - move inactive players to gallery"""
+        players_to_gallery = []
+
+        for player_id, player_info in self.players.items():
+            # Move to gallery if not seen for a while but don't delete
+            if player_info['time_since_seen'] > 60:  # 60 frames without detection
+                players_to_gallery.append(player_id)
+
+        # Move players to gallery
+        for player_id in players_to_gallery:
+            player_info = self.players[player_id]
+
+            # Store in gallery with consolidated features
+            self.player_gallery[player_id] = {
+                'features': player_info['features'],
+                'last_seen_frame': self.frame_count - player_info['time_since_seen'],
+                'total_appearances': player_info.get('total_appearances', 1),
+                'confidence_history': player_info.get('confidence', 0.5),
+                'last_bbox': player_info['bbox']
+            }
+
+            # Remove from active players and return ID to available pool
+            del self.players[player_id]
+            if player_id not in self.available_ids:
+                self.available_ids.append(player_id)
+                self.available_ids.sort()  # Keep IDs sorted
+
+            print(f"📚 Moved player ID {player_id} to gallery (appearances: {self.player_gallery[player_id]['total_appearances']})")
+
+        # Limit gallery size to prevent memory issues
+        if len(self.player_gallery) > self.MAX_PLAYERS * 2:
+            # Remove oldest entries
+            sorted_gallery = sorted(self.player_gallery.items(),
+                                  key=lambda x: x[1]['last_seen_frame'])
+
+            for player_id, _ in sorted_gallery[:len(self.player_gallery) - self.MAX_PLAYERS * 2]:
+                del self.player_gallery[player_id]
+                print(f"🗑️ Removed old player ID {player_id} from gallery")
         
     def draw_tracks(self, frame, tracks):
         """Draw tracking results on frame"""
@@ -514,20 +728,29 @@ class EnhancedFootballTracker:
     def get_statistics(self):
         """Get current tracking statistics"""
         active_players = len([p for p in self.players.values() if p['time_since_seen'] == 0])
-        total_players = len(self.players)
-        
+        total_active = len(self.players)
+        gallery_players = len(self.player_gallery)
+        available_ids = len(self.available_ids)
+
         return {
             'frame_count': self.frame_count,
             'active_players': active_players,
-            'total_players_detected': total_players,
+            'total_players_detected': total_active,
+            'gallery_players': gallery_players,
+            'available_ids': available_ids,
+            'max_players': self.MAX_PLAYERS,
             'tracker_type': self.tracker_type,
-            'model_type': self.yolo_model_name
+            'model_type': self.yolo_model_name,
+            'id_pool_usage': f"{self.MAX_PLAYERS - available_ids}/{self.MAX_PLAYERS}"
         }
         
     def reset(self):
         """Reset tracker state"""
         self.players = {}
+        self.player_gallery = {}
+        self.available_ids = list(range(1, self.MAX_PLAYERS + 1))
         self.next_id = 1
         self.frame_count = 0
         if hasattr(self.tracker, 'reset'):
             self.tracker.reset()
+        print(f"🔄 Tracker reset - {self.MAX_PLAYERS} player IDs available")

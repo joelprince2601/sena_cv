@@ -186,9 +186,18 @@ class StreamlitVideoProcessor:
                 
                 # Update statistics
                 with stats_container:
-                    st.metric("Active Players", stats['active_tracks'])
-                    st.metric("Frame", f"{stats['current_frame']}/{stats['total_frames']}")
-                    st.metric("Time", f"{stats['timestamp']:.1f}s")
+                    col_a, col_b = st.columns(2)
+                    with col_a:
+                        st.metric("Active Players", stats['active_tracks'])
+                        st.metric("Frame", f"{stats['current_frame']}/{stats['total_frames']}")
+                    with col_b:
+                        st.metric("Time", f"{stats['timestamp']:.1f}s")
+
+                        # Show ID pool info for custom tracker
+                        if 'id_pool_usage' in stats:
+                            st.metric("ID Pool", stats['id_pool_usage'])
+                        if 'gallery_players' in stats:
+                            st.metric("Gallery", stats['gallery_players'])
                     
                 # Update progress
                 progress_bar.progress(stats['progress'])
